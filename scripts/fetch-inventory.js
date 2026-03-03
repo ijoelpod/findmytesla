@@ -79,15 +79,10 @@ async function main() {
 
       let data
       try {
-        const res = await fetch(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Referer': 'https://www.tesla.com/inventory/used/m3',
-            'Origin': 'https://www.tesla.com',
-          },
-        })
+        // Route through ScraperAPI to bypass Tesla's bot protection
+        const scraperKey = process.env.SCRAPER_API_KEY
+        const proxiedUrl = `https://api.scraperapi.com?api_key=${scraperKey}&url=${encodeURIComponent(url)}`
+        const res = await fetch(proxiedUrl)
 
         if (!res.ok) {
           console.error(`Tesla API error for ${model} offset ${offset}: ${res.status}`)
