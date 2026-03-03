@@ -30,11 +30,10 @@ function buildTeslaApiUrl(model, offset = 0) {
     offset,
     count: 50,
     outsideOffset: 0,
-    outsideSearch: false,
-    isFalconDeliverySelectionEnabled: false,
-    version: null,
+    outsideSearch: true,
   }
-  return `https://www.tesla.com/inventory/api/v4/inventory-search/inventory-search?query=${encodeURIComponent(JSON.stringify(query))}`
+  // Try the v1 endpoint which has fewer restrictions than v4
+  return `https://www.tesla.com/inventory/api/v1/inventory-results?query=${encodeURIComponent(JSON.stringify(query))}`
 }
 
 function buildImageUrl(model, options = []) {
@@ -134,18 +133,23 @@ async function main() {
     }
   }
 
-  // Mark vehicles no longer listed as unavailable
-  const { data: stored } = await supabase
-    .from('vehicles')
-    .select('vin')
-    .eq('is_available', true)
+  // Only mark vehicles unavailable if we actually got real data back.
+  // If Tesla blocked all requests (0 upserted), skip this to avoid wiping the DB.
+  if (totalUpserted > 0) {
+    const { data: stored } = await supabase
+      .from('vehicles')
+      .select('vin')
+      .eq('is_available', true)
 
-  if (stored) {
-    const toDeactivate = stored.filter(v => !allVins.has(v.vin)).map(v => v.vin)
-    if (toDeactivate.length > 0) {
-      await supabase.from('vehicles').update({ is_available: false }).in('vin', toDeactivate)
-      console.log(`Marked ${toDeactivate.length} vehicles as unavailable`)
+    if (stored) {
+      const toDeactivate = stored.filter(v => !allVins.has(v.vin)).map(v => v.vin)
+      if (toDeactivate.length > 0) {
+        await supabase.from('vehicles').update({ is_available: false }).in('vin', toDeactivate)
+        console.log(`Marked ${toDeactivate.length} vehicles as unavailable`)
+      }
     }
+  } else {
+    console.log('Got 0 results — skipping deactivation to preserve existing data.')
   }
 
   console.log(`Done. Upserted: ${totalUpserted}, Price changes: ${totalPriceChanges}`)
