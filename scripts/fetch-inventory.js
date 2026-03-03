@@ -62,6 +62,9 @@ function normalizeVehicle(raw) {
 }
 
 async function main() {
+  const scraperKey = process.env.SCRAPER_API_KEY
+  console.log('ScraperAPI key present:', !!scraperKey, '| Length:', scraperKey?.length ?? 0)
+
   const allVins = new Set()
   let totalUpserted = 0
   let totalPriceChanges = 0
