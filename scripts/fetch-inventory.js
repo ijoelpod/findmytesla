@@ -22,18 +22,15 @@ function buildTeslaApiUrl(model, offset = 0) {
       market: 'US',
       language: 'en',
       super_region: 'north america',
-      lng: -98.5795,
-      lat: 39.8283,
-      zip: '66502',
-      range: 0,
     },
     offset,
     count: 50,
     outsideOffset: 0,
-    outsideSearch: true,
+    outsideSearch: false,
+    isFalconDeliverySelectionEnabled: false,
+    version: null,
   }
-  // Try the v1 endpoint which has fewer restrictions than v4
-  return `https://www.tesla.com/inventory/api/v1/inventory-results?query=${encodeURIComponent(JSON.stringify(query))}`
+  return `https://www.tesla.com/inventory/api/v4/inventory-results?query=${encodeURIComponent(JSON.stringify(query))}`
 }
 
 function buildImageUrl(model, options = []) {

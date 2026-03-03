@@ -53,7 +53,7 @@ export function buildTeslaApiUrl({ model = 'm3', zip = '10001', lat = 40.7128, l
   const base = import.meta.env.DEV
     ? '/tesla-api'
     : 'https://www.tesla.com'
-  return `${base}/inventory/api/v4/inventory-search/inventory-search?query=${encoded}`
+  return `${base}/inventory/api/v4/inventory-results?query=${encoded}`
 }
 
 /**
