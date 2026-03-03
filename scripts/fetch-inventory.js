@@ -81,11 +81,12 @@ async function main() {
       try {
         // Route through ScraperAPI to bypass Tesla's bot protection
         const scraperKey = process.env.SCRAPER_API_KEY
-        const proxiedUrl = `https://api.scraperapi.com?api_key=${scraperKey}&url=${encodeURIComponent(url)}`
+        const proxiedUrl = `https://api.scraperapi.com?api_key=${scraperKey}&url=${encodeURIComponent(url)}&render=false&country_code=us`
         const res = await fetch(proxiedUrl)
 
         if (!res.ok) {
-          console.error(`Tesla API error for ${model} offset ${offset}: ${res.status}`)
+          const body = await res.text()
+          console.error(`API error for ${model} offset ${offset}: ${res.status} — ${body.slice(0, 200)}`)
           break
         }
 
