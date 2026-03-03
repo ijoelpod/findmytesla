@@ -1,7 +1,8 @@
 // scripts/fetch-inventory.js
-// Runs via GitHub Actions every 4 hours.
-// Fetches Tesla used inventory and stores it in Supabase.
+// Uses Playwright to visit Tesla's site as a real browser,
+// collect session cookies, then fetch inventory via the API using those cookies.
 
+import { chromium } from 'playwright'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -11,7 +12,9 @@ const supabase = createClient(
 
 const TESLA_MODELS = ['m3', 'my', 'ms', 'mx']
 
-function buildTeslaApiUrl(model, offset = 0) {
+const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+function buildApiUrl(model, offset = 0) {
   const query = {
     query: {
       model,
@@ -62,9 +65,28 @@ function normalizeVehicle(raw) {
 }
 
 async function main() {
-  const scraperKey = process.env.SCRAPER_API_KEY
-  console.log('ScraperAPI key present:', !!scraperKey, '| Length:', scraperKey?.length ?? 0)
+  // Step 1: Launch a real browser to establish a Tesla session and collect cookies
+  console.log('Launching browser to establish Tesla session...')
+  const browser = await chromium.launch({ headless: true })
+  const context = await browser.newContext({ userAgent: USER_AGENT })
+  const page = await context.newPage()
 
+  try {
+    await page.goto('https://www.tesla.com/inventory/used/m3', {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000,
+    })
+  } catch (err) {
+    console.log('Page load warning (continuing):', err.message)
+  }
+
+  const cookies = await context.cookies('https://www.tesla.com')
+  const cookieString = cookies.map(c => `${c.name}=${c.value}`).join('; ')
+  console.log(`Got ${cookies.length} cookies from Tesla`)
+
+  await browser.close()
+
+  // Step 2: Use the real cookies to make API calls
   const allVins = new Set()
   let totalUpserted = 0
   let totalPriceChanges = 0
@@ -74,15 +96,20 @@ async function main() {
     let keepFetching = true
 
     while (keepFetching) {
-      const url = buildTeslaApiUrl(model, offset)
+      const url = buildApiUrl(model, offset)
       console.log(`Fetching ${model} offset ${offset}...`)
 
       let data
       try {
-        // Route through ScraperAPI to bypass Tesla's bot protection
-        const scraperKey = process.env.SCRAPER_API_KEY
-        const proxiedUrl = `https://api.scraperapi.com?api_key=${scraperKey}&url=${encodeURIComponent(url)}&render=false&country_code=us&premium=true`
-        const res = await fetch(proxiedUrl)
+        const res = await fetch(url, {
+          headers: {
+            'User-Agent': USER_AGENT,
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': 'https://www.tesla.com/inventory/used/m3',
+            'Cookie': cookieString,
+          },
+        })
 
         if (!res.ok) {
           const body = await res.text()
@@ -98,14 +125,12 @@ async function main() {
 
       const results = data.results || []
       console.log(`Got ${results.length} results for ${model} offset ${offset}`)
-
       if (results.length === 0) break
 
       for (const raw of results) {
         const vehicle = normalizeVehicle(raw)
         allVins.add(vehicle.vin)
 
-        // Check for price change
         const { data: existing } = await supabase
           .from('vehicles')
           .select('price')
@@ -129,8 +154,7 @@ async function main() {
     }
   }
 
-  // Only mark vehicles unavailable if we actually got real data back.
-  // If Tesla blocked all requests (0 upserted), skip this to avoid wiping the DB.
+  // Only deactivate vehicles if we got real data
   if (totalUpserted > 0) {
     const { data: stored } = await supabase
       .from('vehicles')
